@@ -22,6 +22,14 @@ Resources:
         - Key: "Name"
           Value: "private-ec2-route-table"
 
+  PrivateRouteTableDB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: "private-db-route-table"
+
   PrivateRouteTableAssocitationApp1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -39,6 +47,24 @@ Resources:
     Properties:
       RouteTableId: !Ref PrivateRouteTableEC2
       SubnetId: !Ref AppSubnet3
+
+  PrivateDBRouteTableAssocitation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableDB
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateDBRouteTableAssocitation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableDB
+      SubnetId: !Ref PrivateSubnet2
+
+  PrivateDBRouteTableAssocitation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableDB
+      SubnetId: !Ref PrivateSubnet3
 
   PublicSubnet1RouteTableAssocitiation:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -84,6 +110,59 @@ Resources:
       - Key: "Name"
         Value: internet-gateway-demo
 
+  # database security group
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'DB security group'
+      GroupName: 'DB Security Group'
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref SecurityGroup
+          IpProtocol: TCP
+          FromPort: 3306
+          ToPort: 3306
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          IpProtocol: -1 # Allow all
+      Tags:
+        - Key: 'Name'
+          Value: 'DB-Security-Group'
+      VpcId: !Ref VPC
+
+ # rds master 
+  RDSCluster:
+    Type: "AWS::RDS::DBCluster"
+    Properties:
+      DBSubnetGroupName: !Ref SubnetGroup
+      MasterUsername: "admin"
+      MasterUserPassword: "SRmdwvPkfa9VeFQk3qUjsKW"
+      DatabaseName: mediawiki
+      Engine: "aurora-mysql"
+      EngineMode: "global"
+      Port: 3306
+      VpcSecurityGroupIds: 
+      - !Ref DBSecurityGroup
+
+  # first db instance of cluster
+  DBInstance1:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      Engine: aurora-mysql
+      DBClusterIdentifier: !Ref RDSCluster
+      PubliclyAccessible: 'false'
+      DBInstanceClass: db.t3.small
+      DBSubnetGroupName: !Ref SubnetGroup
+
+  # second db instance of cluster
+  DBInstance2:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      Engine: aurora-mysql
+      DBClusterIdentifier: !Ref RDSCluster
+      PubliclyAccessible: 'false'
+      DBInstanceClass: db.t3.small
+      DBSubnetGroupName: !Ref SubnetGroup
+
   # attach vpc with internet gateway
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -91,6 +170,7 @@ Resources:
       InternetGatewayId: !Ref InternetGateway
       VpcId: !Ref VPC
 
+  # nat gateway
   NatGateway:
     Type: AWS::EC2::NatGateway
     Properties: 
@@ -418,3 +498,7 @@ Resources:
         DisableScaleIn: false
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageCPUUtilization 
+Outputs:
+  NetworkLoadBalancerOutput:
+    Description: "Network Loadbalancer output."
+    Value: !GetAtt NetworkLoadBalancer.DNSName
